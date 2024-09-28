@@ -12,7 +12,7 @@ app = FastAPI()
 # Load the chosen prediction and forcasting trained models from models folder 
 # and save it into variables
 
-sgd_pipe = load('models/Predictive/sgd_pipeline.joblib')
+xgb_pipe = load('models/Predictive/xgb_pipeline.joblib')
 prophet_model = load('models/Forecasting/Prof_model1.joblib')
 
 # create a function called read_root() 
@@ -73,36 +73,40 @@ def extract_features(item_id: str, store_id: str, date_str: str) -> Dict[str, Li
         "dept_id": [dept_id],
         "store_id": [store_id],
         "day_name": [day_name],
-        "month": [month_name],
-        "year": [year],
+        "month_name": [month_name],
+        "year": [year]
     }
     
     return features
 
-class SalesForecastRequest(BaseModel):
-    date: date
+# Function to call the saved prediction model by passing the features extracted
+@app.get("/sales/stores/items/", response_model=Dict[str, float])
+def predict_sales(item_id: str, store_id: str, date: str) -> Dict[str, float]:
+    # Extraction of features from the input parameters
+    features = extract_features(item_id, store_id, date)
+    # Convert the input into a pandas DataFrame
+    obs = pd.DataFrame(features)
 
-@app.get("/sales/national/", response_model=Dict[str, float])
-def forecast_sales(request: SalesForecastRequest):
+    # Predict the sales revenue for the given item and store on a given date
+    pred = xgb_pipe.predict(obs)[0]  # Assuming sgd_pipe.predict returns an array
+
+    # Return the prediction in the specified JSON format
+    return {"prediction": round(pred, 2)}  # rounding the prediction to two decimal places
+
+#class SalesForecastRequest(BaseModel):
+ 
+ #   date: date
+
+#@app.get("/sales/national/", response_model=Dict[str, float])
+#def forecast_sales(request: SalesForecastRequest):
     # Here you would implement your forecasting logic
     # Placeholder implementation
-    return {
-        "2016-01-01": 10000.01,
-        "2016-01-02": 10001.12,
-        "2016-01-03": 10002.22,
-        "2016-01-04": 10003.30,
-        "2016-01-05": 10004.46,
-        "2016-01-06": 10005.12,
-        "2016-01-07": 10006.55,
-    }
-
-class SalesPredictionRequest(BaseModel):
-    date: date
-    store_id: int
-    item_id: int
-
-@app.get("/sales/stores/items/", response_model=Dict[str, float])
-def predict_sales(request: SalesPredictionRequest):
-    # Here you would implement your sales prediction logic
-    # Placeholder implementation
-    return {"prediction": 19.72}
+ #   return {
+  #      "2016-01-01": 10000.01,
+   #     "2016-01-02": 10001.12,
+    #    "2016-01-03": 10002.22,
+     #   "2016-01-04": 10003.30,
+      #  "2016-01-05": 10004.46,
+       # "2016-01-06": 10005.12,
+        #"2016-01-07": 10006.55,
+    #}
