@@ -1,10 +1,15 @@
 # Import Libraries
 from fastapi import FastAPI
 from starlette.responses import JSONResponse
+from fastapi.responses import JSONResponse
+from fastapi import HTTPException
+import json
 from joblib import load
 import pandas as pd
 from datetime import date
+from datetime import datetime, timedelta
 from typing import Dict, List
+
 
 #  Instantiate a FastAPI() class and save it into a variable called app
 app = FastAPI()
@@ -19,7 +24,7 @@ prophet_model = load('models/Forecasting/Prof_model1.joblib')
 # nd Add a decorator to it in order to add a GET endpoint to app on the root
 @app.get("/")
 def read_root():
-    return {
+    response_data = {
         "description": "This API provides two models deployed in production: "
                        "1. A predictive model using a Machine Learning algorithm to predict sales revenue for a given item in a specific store on a given date. "
                        "2. A forecasting model using a time-series analysis algorithm to forecast total sales revenue across all stores and items for the next 7 days.",
@@ -44,11 +49,14 @@ def read_root():
         },
         "github_repo": "https://github.com/Paiynthalir/Retail_API"
     }
+    
+    # Pretty-print the JSON response
+    return JSONResponse(content=json.loads(json.dumps(response_data, indent=4)))
 
 # get health endpoint
 @app.get('/health', status_code=200)
 def healthcheck():
-    return {"message": "Hi there! Hearty Welcome to Sales Prediction API"}
+    return {"message": "Hi there! Welcome to Sales Prediction API"}
 
 # Function to extract the features from the input and this output can be the input for the model prediction 
 def extract_features(item_id: str, store_id: str, date_str: str) -> Dict[str, List]:
@@ -82,31 +90,41 @@ def extract_features(item_id: str, store_id: str, date_str: str) -> Dict[str, Li
 # Function to call the saved prediction model by passing the features extracted
 @app.get("/sales/stores/items/", response_model=Dict[str, float])
 def predict_sales(item_id: str, store_id: str, date: str) -> Dict[str, float]:
-    # Extraction of features from the input parameters
-    features = extract_features(item_id, store_id, date)
-    # Convert the input into a pandas DataFrame
-    obs = pd.DataFrame(features)
+    try:
+        # Extraction of features from the input parameters
+        features = extract_features(item_id, store_id, date)
+        # Convert the input into a pandas DataFrame
+        obs = pd.DataFrame(features)
 
-    # Predict the sales revenue for the given item and store on a given date
-    pred = xgb_pipe.predict(obs)[0]  # Assuming sgd_pipe.predict returns an array
+        # Predict the sales revenue for the given item and store on a given date 
+        pred = xgb_pipe.predict(obs)[0]  
 
-    # Return the prediction in the specified JSON format
-    return {"prediction": round(pred, 2)}  # rounding the prediction to two decimal places
+        # Return the prediction in the specified JSON format
+        return {"prediction": round(float(pred), 2)} 
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
-#class SalesForecastRequest(BaseModel):
- 
- #   date: date
 
-#@app.get("/sales/national/", response_model=Dict[str, float])
-#def forecast_sales(request: SalesForecastRequest):
-    # Here you would implement your forecasting logic
-    # Placeholder implementation
- #   return {
-  #      "2016-01-01": 10000.01,
-   #     "2016-01-02": 10001.12,
-    #    "2016-01-03": 10002.22,
-     #   "2016-01-04": 10003.30,
-      #  "2016-01-05": 10004.46,
-       # "2016-01-06": 10005.12,
-        #"2016-01-07": 10006.55,
-    #}
+# Function to call the saved forecast model
+@app.get("/sales/national/", response_model=Dict[str, float])
+def forecast_sales(date: str) -> Dict:
+    try:
+        # Validate and parse the input date
+        parsed_date = datetime.strptime(date, "%Y-%m-%d")
+
+        # Create a DataFrame for the next 7 days
+        future_dates = pd.date_range(start=parsed_date + timedelta(days=1), periods=7)
+        future_df = pd.DataFrame({'ds': future_dates})
+
+        # Make predictions using the Prophet model
+        forecast = prophet_model.predict(future_df)
+
+        # Prepare the forecasted sales data in the specified JSON format
+        forecasted_sales = {row['ds'].strftime('%Y-%m-%d'): round(row['yhat'], 2) for _, row in forecast.iterrows()}
+
+        return forecasted_sales
+
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD.")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
