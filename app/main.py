@@ -9,6 +9,7 @@ import pandas as pd
 from datetime import date
 from datetime import datetime, timedelta
 from typing import Dict, List
+import re
 
 
 #  Instantiate a FastAPI() class and save it into a variable called app
@@ -58,18 +59,36 @@ def read_root():
 def healthcheck():
     return {"message": "Hi there! Welcome to Sales Prediction API"}
 
+
 # Function to extract the features from the input and this output can be the input for the model prediction 
 def extract_features(item_id: str, store_id: str, date_str: str) -> Dict[str, List]:
     # Convert the string date to a date object
-    parsed_date = date.fromisoformat(date_str)
+    try:
+        parsed_date = date.fromisoformat(date_str)
+    except ValueError:
+        raise ValueError("Invalid date format. Use YYYY-mm-dd.")
     
-    # Extract features
-    # Extract dept_id from item_id
-    # Split the item_id by underscores and retrieve the relevant part
+    # Define the regex pattern for valid item_id
+    pattern = r"^[A-Z]+_\d_[0-9]{3}$"  
+
+    # Split the item_id by underscores
     parts = item_id.split("_")
-    if len(parts) > 1:
+
+    # Validate the item_id format
+    if len(parts) == 3 and re.match(pattern, item_id):
         # Combine the first two parts to form dept_id
         dept_id = "_".join(parts[:2])
+    else:
+        raise ValueError("Invalid item ID format. Expected format is <characters>_<singledigit>_<3digits>.")
+    
+    # Define the regex pattern for valid store_id
+    pattern = r"^(CA|TX|WI)_\d+$"
+    # Validate store_id format
+    if re.match(pattern, store_id):
+        store_number = store_id.split("_")[1]  
+    else:
+        raise ValueError("Invalid store ID. Expected values CA_#, TX_#, and WI_#")
+
 
     # Extract date features 
     day_name = parsed_date.strftime('%a')  # Abbreviated day name
@@ -87,7 +106,7 @@ def extract_features(item_id: str, store_id: str, date_str: str) -> Dict[str, Li
     
     return features
 
-# Function to call the saved prediction model by passing the features extracted
+
 @app.get("/sales/stores/items/", response_model=Dict[str, float])
 def predict_sales(item_id: str, store_id: str, date: str) -> Dict[str, float]:
     try:
@@ -101,6 +120,9 @@ def predict_sales(item_id: str, store_id: str, date: str) -> Dict[str, float]:
 
         # Return the prediction in the specified JSON format
         return {"prediction": round(float(pred), 2)} 
+    
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
