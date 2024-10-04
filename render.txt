@@ -1,0 +1,9 @@
+# The link to the deployed FastAPI on Render
+https://retail-fastapi-app.onrender.com
+
+# Links to the available APIs with sample request parameters
+https://retail-fastapi-app.onrender.com/
+https://retail-fastapi-app.onrender.com/health
+https://retail-fastapi-app.onrender.com/sales/stores/items/?item_id=HOBBIES_1_006&store_id=CA_1&date=2016-10-01
+https://retail-fastapi-app.onrender.com/sales/national/?date=2016-10-01
+
